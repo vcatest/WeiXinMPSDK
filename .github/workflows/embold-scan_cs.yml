@@ -15,7 +15,7 @@ jobs:
     - name: Install dependencies (curl, wget, libssl1.1)
       run: |
         apt-get update
-        apt-get install curl wget libssl1.1 -y 
+        apt-get install curl wget libssl1.1 -y
     
     # NEW STEP: Install Java (OpenJDK 11 is a common, stable version)
     - name: Install Java for Embold Scanner
@@ -29,9 +29,25 @@ jobs:
         
     - name: Embold Analyse
       run: |
+        # Download and extract the scanner
         curl ${{ vars.EMBOLD_SCANNER_URL}} -o browserstack-codequality-scanner-archive.tar.gz
         tar xvf browserstack-codequality-scanner-archive.tar.gz
         echo "Download and extract BrowserStack CQ Scanner done"
-        curl --silent --location --request GET "${{ vars.EMBOLD_URL_CS}}/api/v1/repositories/0bf73c572ba3074f5a22f66b6a859233/scans/config/download" --header "Authorization:Bearer ${{ secrets.EMBOLD_TOKEN_CS}" -o repository-configuration.json
+        
+        # Download repository configuration - ***FIXED: Added missing closing double quote for Authorization header.***
+        curl --silent --location --request GET "${{ vars.EMBOLD_URL_CS}}/api/v1/repositories/0bf73c572ba3074f5a22f66b6a859233/scans/config/download" \
+          --header "Authorization:Bearer ${{ secrets.EMBOLD_TOKEN_CS}}" \
+          -o repository-configuration.json
         echo "Download repository configuration file done"
-        ./browserstack-codequality-scanner/bin/embold-scanner analyse -u ${{ vars.EMBOLD_URL_CS}} -t ${{ secrets.EMBOLD_TOKEN_CS} -r 0bf73c572ba3074f5a22f66b6a859233 -b . -d ./embold-data -c ./repository-configuration.json -l ./embold-log -sh $GITHUB_WORKSPACE/embold-scanner-home -v
+        
+        # Run the Embold Scanner - ***FIXED: Added missing closing brace '}' for the token secret.***
+        ./browserstack-codequality-scanner/bin/embold-scanner analyse \
+          -u ${{ vars.EMBOLD_URL_CS}} \
+          -t ${{ secrets.EMBOLD_TOKEN_CS}} \
+          -r 0bf73c572ba3074f5a22f66b6a859233 \
+          -b . \
+          -d ./embold-data \
+          -c ./repository-configuration.json \
+          -l ./embold-log \
+          -sh $GITHUB_WORKSPACE/embold-scanner-home \
+          -v
