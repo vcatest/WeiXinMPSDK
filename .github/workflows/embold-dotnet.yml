@@ -1,0 +1,61 @@
+name: Build WeiXinMPSDK
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  build:
+    name: Build and Analyze
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          9.0.x
+
+    # DYNAMICALLY FIND SOLUTION FILE to avoid "Project file does not exist" errors
+    - name: Find Solution File
+      id: find-sln
+      shell: pwsh
+      run: |
+        echo "Searching for .sln files..."
+        # Finds the first .sln file in the repository (recursively)
+        $slnFile = Get-ChildItem -Path . -Filter *.sln -Recurse | Select-Object -First 1
+        
+        if ($null -eq $slnFile) {
+            echo "::error::No .sln file found! Listing all files to help debug:"
+            Get-ChildItem -Recurse | Select-Object FullName
+            exit 1
+        }
+        
+        echo "Found solution: $($slnFile.FullName)"
+        echo "SLN_PATH=$($slnFile.FullName)" >> $env:GITHUB_ENV
+
+    - name: Restore dependencies
+      run: dotnet restore "${{ env.SLN_PATH }}"
+
+    - name: Build
+      run: dotnet build "${{ env.SLN_PATH }}" --no-restore --configuration Release
+
+    - name: Embold Analyse
+      shell: bash # Explicitly use bash on Windows for curl/tar compatibility
+      run: |
+        curl ${{ vars.EMBOLD_SCANNER_URL}} -o browserstack-codequality-scanner-archive.tar.gz
+        tar xvf browserstack-codequality-scanner-archive.tar.gz
+        echo "Download and extract BrowserStack CQ Scanner done"
+        
+        # ⚠️ IMPORTANT: Replace 'YOUR_WEIXIN_REPO_ID' with the actual ID from your Embold dashboard
+        curl --silent --location --request GET "${{ vars.EMBOLD_URL_CS}}/api/v1/repositories/b4e9572191aff6f08f175b69122610b4/scans/config/download" --header "Authorization:Bearer ${{ secrets.EMBOLD_TOKEN_CS}}" -o repository-configuration.json
+        echo "Download repository configuration file done"
+        
+        # ⚠️ IMPORTANT: Replace 'YOUR_WEIXIN_REPO_ID' here as well
+        ./browserstack-codequality-scanner/bin/embold-scanner analyse -u ${{ vars.EMBOLD_URL_CS}} -t ${{ secrets.EMBOLD_TOKEN_CS}} -r b4e9572191aff6f08f175b69122610b4 -b . -d ./embold-data -c ./repository-configuration.json -v
