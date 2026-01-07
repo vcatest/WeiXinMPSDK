@@ -1,4 +1,4 @@
-name: Build WeiXinMPSDK
+name: Build WeiXinMPSDK (Ubuntu)
 
 on:
   push:
@@ -15,6 +15,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # 1. Install Mono (CRITICAL: Required to support .NET Framework targets on Linux)
+    #    Without this, targets like 'net45' or 'net461' inside the SDK will fail to build.
+    - name: Install Mono
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y mono-devel
+
+    # 2. Setup .NET (For .NET 8.0/9.0 targets)
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -22,13 +30,12 @@ jobs:
           8.0.x
           9.0.x
 
-    # DYNAMICALLY FIND SOLUTION FILE to avoid "Project file does not exist" errors
+    # 3. Dynamic Solution Finder (Works on Linux via PowerShell Core)
     - name: Find Solution File
       id: find-sln
       shell: pwsh
       run: |
         echo "Searching for .sln files..."
-        # Finds the first .sln file in the repository (recursively)
         $slnFile = Get-ChildItem -Path . -Filter *.sln -Recurse | Select-Object -First 1
         
         if ($null -eq $slnFile) {
@@ -40,6 +47,8 @@ jobs:
         echo "Found solution: $($slnFile.FullName)"
         echo "SLN_PATH=$($slnFile.FullName)" >> $env:GITHUB_ENV
 
+    # 4. Restore & Build
+    #    'dotnet build' on Linux will use Mono for reference assemblies if installed.
     - name: Restore dependencies
       run: dotnet restore "${{ env.SLN_PATH }}"
 
@@ -47,15 +56,14 @@ jobs:
       run: dotnet build "${{ env.SLN_PATH }}" --no-restore --configuration Release
 
     - name: Embold Analyse
-      shell: bash # Explicitly use bash on Windows for curl/tar compatibility
+      # Note: Embold Scanner URL must point to the LINUX version
       run: |
         curl ${{ vars.EMBOLD_SCANNER_URL}} -o browserstack-codequality-scanner-archive.tar.gz
         tar xvf browserstack-codequality-scanner-archive.tar.gz
         echo "Download and extract BrowserStack CQ Scanner done"
         
-        # ⚠️ IMPORTANT: Replace 'YOUR_WEIXIN_REPO_ID' with the actual ID from your Embold dashboard
+        # Using Repo ID: b4e9572191aff6f08f175b69122610b4
         curl --silent --location --request GET "${{ vars.EMBOLD_URL_CS}}/api/v1/repositories/b4e9572191aff6f08f175b69122610b4/scans/config/download" --header "Authorization:Bearer ${{ secrets.EMBOLD_TOKEN_CS}}" -o repository-configuration.json
         echo "Download repository configuration file done"
         
-        # ⚠️ IMPORTANT: Replace 'YOUR_WEIXIN_REPO_ID' here as well
         ./browserstack-codequality-scanner/bin/embold-scanner analyse -u ${{ vars.EMBOLD_URL_CS}} -t ${{ secrets.EMBOLD_TOKEN_CS}} -r b4e9572191aff6f08f175b69122610b4 -b . -d ./embold-data -c ./repository-configuration.json -v
