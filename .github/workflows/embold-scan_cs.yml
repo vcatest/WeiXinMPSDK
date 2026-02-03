@@ -5,6 +5,7 @@ on:
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,7 +18,6 @@ jobs:
         apt-get update
         apt-get install curl wget libssl1.1 -y
     
-    # NEW STEP: Install Java (OpenJDK 11 is a common, stable version)
     - name: Install Java for Embold Scanner
       run: |
         apt-get install openjdk-11-jre -y
@@ -34,13 +34,13 @@ jobs:
         tar xvf browserstack-codequality-scanner-archive.tar.gz
         echo "Download and extract BrowserStack CQ Scanner done"
         
-        # Download repository configuration - ***FIXED: Added missing closing double quote for Authorization header.***
+        # Download repository configuration
         curl --silent --location --request GET "${{ vars.EMBOLD_URL_CS}}/api/v1/repositories/0bf73c572ba3074f5a22f66b6a859233/scans/config/download" \
           --header "Authorization:Bearer ${{ secrets.EMBOLD_TOKEN_CS}}" \
           -o repository-configuration.json
         echo "Download repository configuration file done"
         
-        # Run the Embold Scanner - ***FIXED: Added missing closing brace '}' for the token secret.***
+        # Run the Embold Scanner
         ./browserstack-codequality-scanner/bin/embold-scanner analyse \
           -u ${{ vars.EMBOLD_URL_CS}} \
           -t ${{ secrets.EMBOLD_TOKEN_CS}} \
@@ -49,3 +49,11 @@ jobs:
           -d ./embold-data \
           -c ./repository-configuration.json \
           -v
+
+    - name: Archive logs and binaries
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: parsed_files
+        path: |
+          /__w/DevToys/DevToys/embold-data/**/*.txt
